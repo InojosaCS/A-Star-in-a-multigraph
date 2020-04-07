@@ -1,3 +1,18 @@
+/**
+ * Programa que, dado un mapa, líneas operativas y los nombres de
+ * dos paradas, indique las líneas que se deben tomar, y dónde realizar
+ * la transferencia entre ellas para realizar el trayecto lo mas rapido posible.
+ * El algoritmo utilizado es A estrella. Se utiliza la distancia euclideana como
+ * funcion (junto al costo real hasta una estacion dada) para estimar el tiempo 
+ * faltante, se promedio el tiempo entre varios tramos del recorrido para calcular 
+ * una constante para que la distancia euclideana sea representativa. 
+ * Luego se comparan los resultados cuando se minimizan los trasbordos.  
+ * Para el minimo de trasbordos se usa el mismo algoritmo que en el proyecto 2. Se decidio 
+ * mantener los algoritmos en un solo archivo por comodidad al usar variables globales.
+ * La parte de lectura del input se divide en dos archivos, el presente y CambiarTexto.java
+ * 
+ */
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -12,18 +27,16 @@ public class MejorRuta {
 	/**
 	 * Variables globales, sus nombres describe el uso de cada uno
 	 */
-	public static String[] lineasDeMetro;
-	public static int nroLineas, nroEstaciones, minimo = 7;
-	public static String caminoCompleto;
-	public static HashMap<Integer, Integer> hashing = new HashMap <Integer, Integer>();
-	public static Vertice verticeInicio, verticeFin;
-	public static LinkedList<Vertice> colaDeEspera; 
+	public static String[] lineasDeMetro;  // Guarda los nombres de las lineas de metro
+	public static int nroLineas, nroEstaciones, minimo = 7; // minimo sirve para acotar el numero de trasbordos posibles durante el backtracking
+	public static String caminoCompleto; // Sirve para guardar el camino con todas las estacionea
+	public static HashMap<Integer, Integer> hashing = new HashMap <Integer, Integer>(); // Mapea los Id de los nodos con {0,1,2,....nroEstaciones} para representarlos en un arreglo
+	public static Vertice verticeInicio, verticeFin; // Para acceder facilmente a los vertices de Inicio y Fin facilmente en cualquier metodo del programa
+	public static Set<Vertice> colaDeEspera; // El priority queue (nota: La complejidad con monticulo de fibonacci no disminunia pues N*logN < N*(nroLados^2)
     
 	/**
-     * Llama a las otras funciones para cargar eLa Graformacion y hacer el backtracking
-     * (De 18 casos de prueba, generados por los autores, el tiempo maximo esperado por 
-     * el algoritmo es alredor de dos minutos en dos casos, en los otros 16 fue instantaneo;
-     * probado en una laptop con Windows10, procesador Intel Core i5-8265U @ 1.60GHz 1.80GHz y 8gb RAM)
+     * Llama a las otras funciones para cargar la informacion del grafo,
+     * llamar a A Estrella, hacer el Backtracking, e imprimir la respuesta.
      * @param args Archivo con la nformacion que el usuario proporciona
      */
 	public static void main(String[] args) {
@@ -35,7 +48,7 @@ public class MejorRuta {
         	BufferedReader Lector = new BufferedReader(new FileReader(args[0]));
 			Grafo grafo;
 			Grafo grafoInducido;
-			
+			// Se le da orientacion al grafo
 			String orientacion = Lector.readLine();
 			if(orientacion.contentEquals("N") || orientacion.contentEquals("n")) {
 				grafo = new GrafoNoDirigido();
@@ -49,14 +62,14 @@ public class MejorRuta {
 				return;
 			}
 			Lector.close(); 
-			
+			// Se carga su info
 			leerEstaciones(args[0]);
 			grafo.cargarGrafo(args[0]);
 			grafoInducido = grafo;
 			CambiarTexto b = new CambiarTexto();
 			b.recuperarArchivo(args[0], lineasDeMetro);
 			
-			// Busca los vertices iniciales y finales
+			// Busca los vertices iniciales y finales y se mapean los verices
 			Collection<Vertice> vertices = grafo.vertices();
 			nroEstaciones = vertices.size();
 			
@@ -72,53 +85,67 @@ public class MejorRuta {
 				if(vertice.getNombre().contentEquals(args[3])) 	
 					verticeFin = grafo.obtenerVertice(vertice.getId());
 			}
-		
+			// Si alguno de los vertices no esta, se lanza un mensaje de error
 			if(verticeInicio.getNombre().contentEquals("") || verticeFin.getNombre().contentEquals("")) {
 				System.out.println("<pIncio> o <pFin> no pertence al conjunto de estaciones en <mapa>, chequee que esten escritas igual");
 				return;
 			}
 			System.out.println("Caminos entre " + verticeInicio.getNombre() + " y " + verticeFin.getNombre() + " (El programa termina cuando aparezca el mensaje de finalizado):\n");
 			
-			LinkedList<String> respuestas = new LinkedList<String>();
+			LinkedList<String> respuestas = new LinkedList<String>(); // Lista enlazada donde se guardaran Strings con las respuestas
 			String grafoOperativoAEstrella = "-1", grafoOperativoBacktracking = "-1", grafoInducidoAEstrella = "-1", grafoInducidoBacktracking;
 			
+			// Se llama a las funciones para guardar los caminos en unos Strings a los cuales luego se les dara el formato de salida
 			if(grafo instanceof GrafoNoDirigido) {
-				grafoOperativoAEstrella = aEstrellaConDijkstra((GrafoNoDirigido) grafo, verticeInicio);
+				grafoOperativoAEstrella = aEstrellaConDijkstra((GrafoNoDirigido) grafo);
 				grafoOperativoBacktracking = backtracking((GrafoNoDirigido)grafo, verticeInicio, verticeFin);
 				grafoOperativoBacktracking = obtenerTiempo((GrafoNoDirigido)grafo, grafoOperativoBacktracking) + " " + grafoOperativoBacktracking;
 				inducirGrafo(args[1], (GrafoNoDirigido) grafoInducido);
 				minimo = 7;
-				grafoInducidoAEstrella = aEstrellaConDijkstra((GrafoNoDirigido) grafoInducido, verticeInicio);
+				grafoInducidoAEstrella = aEstrellaConDijkstra((GrafoNoDirigido) grafoInducido);
 				grafoInducidoBacktracking = backtracking((GrafoNoDirigido)grafoInducido, verticeInicio, verticeFin);
 				grafoInducidoBacktracking = obtenerTiempo((GrafoNoDirigido)grafoInducido, grafoInducidoBacktracking) + grafoInducidoBacktracking;
 			}
 			else {
-				grafoOperativoAEstrella = aEstrellaConDijkstra((GrafoDirigido) grafo, verticeInicio);
+				grafoOperativoAEstrella = aEstrellaConDijkstra((GrafoDirigido) grafo);
 				grafoOperativoBacktracking = backtracking((GrafoDirigido)grafo, verticeInicio, verticeFin);
 				grafoOperativoBacktracking = obtenerTiempo((GrafoDirigido)grafo, grafoOperativoBacktracking) + " " + grafoOperativoBacktracking;
 				inducirGrafo(args[1], (GrafoDirigido) grafoInducido);
 				minimo = 7;
-				grafoInducidoAEstrella = aEstrellaConDijkstra((GrafoDirigido) grafoInducido, verticeInicio);
+				grafoInducidoAEstrella = aEstrellaConDijkstra((GrafoDirigido) grafoInducido);
 				grafoInducidoBacktracking = backtracking((GrafoDirigido)grafoInducido, verticeInicio, verticeFin);
 				grafoInducidoBacktracking = obtenerTiempo((GrafoDirigido)grafoInducido, grafoInducidoBacktracking) + grafoInducidoBacktracking;
 			}
+			// En el caso hipotetico, que el algoritmo no haya retornada el camino minimo, se retornara el camino minimo conocido en el programa
+			String[] h1, h2, h3, h4;
+			h1 = grafoOperativoAEstrella.split("\\s+");
+			h2 = grafoOperativoBacktracking.split("\\s+");
+			h3 = grafoInducidoAEstrella.split("\\s+");
+			h4 = grafoInducidoBacktracking.split("\\s+");
 			
+			if(Double.parseDouble(h1[0])>Double.parseDouble(h2[0])) grafoOperativoAEstrella = grafoOperativoBacktracking; 
+			if(Double.parseDouble(h3[0])>Double.parseDouble(h4[0])) grafoInducidoAEstrella = grafoInducidoBacktracking; 
+			// Se agregan las respuestas en la lista para luego iterar sobre ellas
 			respuestas.add(grafoOperativoAEstrella);
 			respuestas.add(grafoOperativoBacktracking);
 			respuestas.add(grafoInducidoAEstrella);
 			respuestas.add(grafoInducidoBacktracking);
 			
+			// Se le da el formato a la respuesta con la informacion proporcionada por el algoritmo
 			String a = "", auxiliar [] = new String[] {"Todas las lineas operativas:", "Todas las lineas operativas minimizando transbordos:", "Con las lineas inducidas", "Con las lineas inducidas minimizando transbordos:"};
 			int k=0;
 			
+			// Se itera y se imprime las respuestas con su formato correspondiente
 			for(String respuesta: respuestas) {	
 				if(respuesta.contentEquals("-1")) { 
 					System.out.println("No hay camino en el grafo inducido entre " + verticeInicio.getNombre() + " y " + verticeFin.getNombre() + a + "\n"); 
 					a = " minimizando trasbordos";
 				}else {
 					String[] Auxiliar = respuesta.split("\\s+");
-					String numeroMinimoTrasbordos = Auxiliar[0], ultimaEstacionCambiada = Auxiliar[1] + " " + Auxiliar[2]; int ultimaLineaCambiada = Integer.parseInt(Auxiliar[3]);
+					String tiempoMinimo = Auxiliar[0], ultimaEstacionCambiada = Auxiliar[1] + " " + Auxiliar[2]; 
+					int ultimaLineaCambiada = Integer.parseInt(Auxiliar[3]);
 					System.out.println(auxiliar[k]);
+					
 					for(i=3; i<Auxiliar.length; i+=3) {
 						if(Integer.parseInt(Auxiliar[i])!=(ultimaLineaCambiada)) {
 							System.out.println("Tome la linea " + lineasDeMetro[ultimaLineaCambiada] + " desde " + ultimaEstacionCambiada + " hasta " + Auxiliar[i-2]+" "+ Auxiliar[i-1]);
@@ -126,12 +153,12 @@ public class MejorRuta {
 							ultimaLineaCambiada = Integer.parseInt(Auxiliar[i]);
 						}
 					}
+					
 					System.out.println("Tome la linea " + lineasDeMetro[ultimaLineaCambiada] + " desde " + ultimaEstacionCambiada + " hasta " +  verticeFin.getId() + " " +verticeFin.getNombre());
-					System.out.println("Tiempo total: " + numeroMinimoTrasbordos+"\n");
+					System.out.println("Tiempo total: " + tiempoMinimo +"\n");
 				}
 				k++;
         	}	
-			
 			System.out.println("Fin del programa");
 			
         } catch (IOException e) {
@@ -143,12 +170,20 @@ public class MejorRuta {
         }
 	}
 
-	
-	private static String aEstrellaConDijkstra(GrafoDirigido grafo, Vertice actual) { 
+	/**
+	 *  Hace un recorrido similar que Dijkstra, salvo que al buscar en la cola de prioridad selecciona de las alternativas posibles en cada iteración, la alternativa que
+     *  minimiza el costo estimado desde la estacion inicial hasta la estacion final. En otras palabras utiliza información del problema que le permita decidir cual 
+     *  podría ser el mejor camino a futuro. A su vez, para cada estacion, existe un tabla que guarda los caminos y el tiempo para cada linea existente, es decir, va calculando 
+     *  con un enfoque greedy el costo minimo para llegar a una estacion por una linea dada, considerando el costo hasta la estacion antecesora y el costo hacer trasbordo
+     *  (si hubiere) o mantenerse en la misma linea. Al llegar al destino, escoge el camino con menor costo de todos.
+     * @param GrafoD grafo
+     * @return String respuesta1: Es el camino con todas las estaciones y lineas
+     */
+	private static String aEstrellaConDijkstra(GrafoDirigido grafo) { 
 		
 		double [][] valoresVertice = new double[nroEstaciones][nroLineas]; // Aca se guardaran los costos minimo de llegar a cada estacion segun la linea
 		String [][] caminosVertice = new String[nroEstaciones][nroLineas]; // Aca se guardaran los caminos costos minimo de llegar a cada estacion segun la linea
-		String respuesta1 = "-1";
+		String respuesta1 = "-1"; // String donde se guardara la respuesta
 		
 		// Se inicializan todos los valores como 99999 (neutro para comparar los caminos), y los caminos como vacios
 		for(Vertice vertice: grafo.vertices()) {
@@ -164,73 +199,81 @@ public class MejorRuta {
 			caminosVertice[hashing.get(verticeInicio.getId())][i] = verticeInicio.getId() + " " + verticeInicio.getNombre();
 		}
 		
-		colaDeEspera = new LinkedList<Vertice>();
-		colaDeEspera.add(actual);
+		colaDeEspera = new HashSet<Vertice>(); // Se crea la cola de espera
+		colaDeEspera.add(verticeInicio); // Se el vertice incial, que es con el comienza la busqueda
 		boolean [] visitados = new boolean[nroEstaciones];
+		visitados[hashing.get(verticeInicio.getId())] = true; // Se marca el vertice incial como visitado
 		
 		while(!colaDeEspera.isEmpty()) { 
-			
 			Vertice minimo = extraerMinimo(valoresVertice);
-			//System.out.println(minimo.getNombre() + " " + minimo.getId());
-			
-			// Si toca expandir el vertice destino es porque ya hemos llegado, y se termina el programa
+			// Si toca expandir el vertice destino es porque ya hemos llegado, se escoge el menor camino y se termina el programa
 			if(minimo.getId()==verticeFin.getId()) { 				
 				double minRespuesta = 99999;
 				for(int i=0; i<nroLineas; i++) {
 					if(valoresVertice[hashing.get(verticeFin.getId())][i] < minRespuesta) {
 						minRespuesta = valoresVertice[hashing.get(verticeFin.getId())][i];
 						respuesta1 = Double.toString(valoresVertice[hashing.get(verticeFin.getId())][i]) + " " +  (caminosVertice[hashing.get(verticeFin.getId())][i]);
-						//System.out.println(caminosVertice[hashing.get(verticeFin.getId())][i]);
-						
 					}
 				}
 				break;
 			}
-			
+
 			Set<Vertice> sucesores = grafo.sucesores(minimo.getId()); // se buscan los sucesores del vertice minimo
 
 			for(Vertice vertice: sucesores) {
 				if(!visitados[hashing.get(vertice.getId())]) {
+					// Para cada linea de metro se busca un resultado
 					for(int i=0; i<nroLineas; i++) {
-						
+						// se ve que exista una linea entre los dos arcos, y de estar se le extrae informacion
 						if(grafo.estaArco(minimo, vertice, i)) {
-							
 							Arco arco = new Arco(minimo, vertice, i, grafo.obtenerArco(minimo, vertice, i).getPeso());
 							arco = grafo.obtenerArco(minimo, vertice, i);
 							String helper = "";
 							double minimoActual = valoresVertice[hashing.get(vertice.getId())][i];
-							
+							// Para cada linea de metro del antecesor del vertice se busca el camino minimo entre seguir por la misma linea o hacer un trasbordo
 							for(int j=0; j<nroLineas; j++) {
-								
+								// Si se regresa al origen se reinicia este parametro
+								if(minimo.getId()==verticeInicio.getId()) caminosVertice[hashing.get(minimo.getId())][j] = verticeInicio.getId() + " " + verticeInicio.getNombre();
 								// Si se trata de la misma linea
 								if(i==j && valoresVertice[hashing.get(minimo.getId())][j] + arco.getPeso() < minimoActual && minimo.getId()!=verticeInicio.getId()) {
 									minimoActual = valoresVertice[hashing.get(minimo.getId())][j] + arco.getPeso();
 									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre();
-								
 								// Si hay que hacer transferencia
 								}else if(valoresVertice[hashing.get(minimo.getId())][j] + minimo.getPeso() + arco.getPeso() < minimoActual) {
 									minimoActual = valoresVertice[hashing.get(minimo.getId())][j] + minimo.getPeso() + arco.getPeso();
-									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre();
-									 
+									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre();	 
 								}
 							}
 							valoresVertice[hashing.get(vertice.getId())][i] = minimoActual;
-							caminosVertice[hashing.get(vertice.getId())][i] += helper;
+							if(minimo.getId()==verticeInicio.getId()) {
+								caminosVertice[hashing.get(vertice.getId())][i] = " " + helper;
+							}else{
+								caminosVertice[hashing.get(vertice.getId())][i] = helper;
+							}
 						}
 					}
-					colaDeEspera.add(vertice);
-					visitados[hashing.get(minimo.getId())] = true;
+					colaDeEspera.add(vertice); // se agrega el vertice recien analizado a la cola de priridad
+					visitados[hashing.get(minimo.getId())] = true; // se marca la estacion actual como visitada
 				}
 			}
 		}
 		return respuesta1;
 	}
 
-	private static String aEstrellaConDijkstra(GrafoNoDirigido grafo, Vertice actual) { 
+	/**
+	 *  Hace un recorrido similar que Dijkstra, salvo que al buscar en la cola de prioridad selecciona de las alternativas posibles en cada iteración, la alternativa que
+     *  minimiza el costo estimado desde la estacion inicial hasta la estacion final. En otras palabras utiliza información del problema que le permita decidir cual 
+     *  podría ser el mejor camino a futuro. A su vez, para cada estacion, existe un tabla que guarda los caminos y el tiempo para cada linea existente, es decir, va calculando 
+     *  con un enfoque greedy el costo minimo para llegar a una estacion por una linea dada, considerando el costo hasta la estacion antecesora y el costo hacer trasbordo
+     *  (si hubiere) o mantenerse en la misma linea. Al llegar al destino, escoge el camino con menor costo de todos.
+     * @param GrafoND grafo
+     * @return String respuesta1: Es el camino con todas las estaciones y lineas
+     */
+	private static String aEstrellaConDijkstra(GrafoNoDirigido grafo) { 
 		
 		double [][] valoresVertice = new double[nroEstaciones][nroLineas]; // Aca se guardaran los costos minimo de llegar a cada estacion segun la linea
 		String [][] caminosVertice = new String[nroEstaciones][nroLineas]; // Aca se guardaran los caminos costos minimo de llegar a cada estacion segun la linea
-		String respuesta1 = "-1";
+		String respuesta1 = "-1"; // String donde se guardara la respuesta
 		
 		// Se inicializan todos los valores como 99999 (neutro para comparar los caminos), y los caminos como vacios
 		for(Vertice vertice: grafo.vertices()) {
@@ -243,71 +286,76 @@ public class MejorRuta {
 		// Se inicializan todos los valores del nodo incial
 		for(int i=0; i<nroLineas; i++) {
 			valoresVertice[hashing.get(verticeInicio.getId())][i] = 0;
-			caminosVertice[hashing.get(verticeInicio.getId())][i] = verticeInicio.getId() + " " + verticeInicio.getNombre() + " ";
+			caminosVertice[hashing.get(verticeInicio.getId())][i] = verticeInicio.getId() + " " + verticeInicio.getNombre();
 		}
 		
-		colaDeEspera = new LinkedList<Vertice>();
-		colaDeEspera.add(actual);
+		colaDeEspera = new HashSet<Vertice>(); // Se crea la cola de espera
+		colaDeEspera.add(verticeInicio); // Se el vertice incial, que es con el comienza la busqueda
 		boolean [] visitados = new boolean[nroEstaciones];
+		visitados[hashing.get(verticeInicio.getId())] = true; // Se marca el vertice incial como visitado
 		
 		while(!colaDeEspera.isEmpty()) { 
-			
 			Vertice minimo = extraerMinimo(valoresVertice);
-			//System.out.println(minimo.getNombre() + " " + minimo.getId());
-			
-			// Si toca expandir el vertice destino es porque ya hemos llegado, y se termina el programa
+			// Si toca expandir el vertice destino es porque ya hemos llegado, se escoge el menor camino y se termina el programa
 			if(minimo.getId()==verticeFin.getId()) { 				
 				double minRespuesta = 99999;
 				for(int i=0; i<nroLineas; i++) {
 					if(valoresVertice[hashing.get(verticeFin.getId())][i] < minRespuesta) {
 						minRespuesta = valoresVertice[hashing.get(verticeFin.getId())][i];
 						respuesta1 = Double.toString(valoresVertice[hashing.get(verticeFin.getId())][i]) + " " +  (caminosVertice[hashing.get(verticeFin.getId())][i]);
-						//System.out.println(caminosVertice[hashing.get(verticeFin.getId())][i]);
-						
 					}
 				}
 				break;
 			}
-			
-			Set<Vertice> adyacentes = grafo.adyacentes(minimo.getId()); // se buscan los adyacentes del vertice minimo
+
+			Set<Vertice> adyacentes = grafo.adyacentes(minimo.getId()); // se buscan los sucesores del vertice minimo
 
 			for(Vertice vertice: adyacentes) {
 				if(!visitados[hashing.get(vertice.getId())]) {
+					// Para cada linea de metro se busca un resultado
 					for(int i=0; i<nroLineas; i++) {
-						
+						// se ve que exista una linea entre los dos arcos, y de estar se le extrae informacion
 						if(grafo.estaArista(minimo, vertice, i)) {
-							
 							Arista arista = new Arista(minimo, vertice, i, grafo.obtenerArista(minimo, vertice, i).getPeso());
 							arista = grafo.obtenerArista(minimo, vertice, i);
 							String helper = "";
 							double minimoActual = valoresVertice[hashing.get(vertice.getId())][i];
-							
+							// Para cada linea de metro del antecesor del vertice se busca el camino minimo entre seguir por la misma linea o hacer un trasbordo
 							for(int j=0; j<nroLineas; j++) {
-								
+								// Si se regresa al origen se reinicia este parametro
+								if(minimo.getId()==verticeInicio.getId()) caminosVertice[hashing.get(minimo.getId())][j] = verticeInicio.getId() + " " + verticeInicio.getNombre();
 								// Si se trata de la misma linea
 								if(i==j && valoresVertice[hashing.get(minimo.getId())][j] + arista.getPeso() < minimoActual && minimo.getId()!=verticeInicio.getId()) {
 									minimoActual = valoresVertice[hashing.get(minimo.getId())][j] + arista.getPeso();
-									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre() + " ";
-								
+									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre();
 								// Si hay que hacer transferencia
 								}else if(valoresVertice[hashing.get(minimo.getId())][j] + minimo.getPeso() + arista.getPeso() < minimoActual) {
 									minimoActual = valoresVertice[hashing.get(minimo.getId())][j] + minimo.getPeso() + arista.getPeso();
-									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre() + " ";
-									 
+									helper = caminosVertice[hashing.get(minimo.getId())][j] + " " + i + " " + vertice.getId() + " " + vertice.getNombre();	 
 								}
 							}
 							valoresVertice[hashing.get(vertice.getId())][i] = minimoActual;
-							caminosVertice[hashing.get(vertice.getId())][i] += helper;
+							if(minimo.getId()==verticeInicio.getId()) {
+								caminosVertice[hashing.get(vertice.getId())][i] = " " + helper;
+							}else{
+								caminosVertice[hashing.get(vertice.getId())][i] = helper;
+							}
 						}
 					}
-					colaDeEspera.add(vertice);
-					visitados[hashing.get(minimo.getId())] = true;
+					colaDeEspera.add(vertice); // se agrega el vertice recien analizado a la cola de priridad
+					visitados[hashing.get(minimo.getId())] = true; // se marca la estacion actual como visitada
 				}
 			}
 		}
 		return respuesta1;
 	}
 
+	/**
+	 *  Busca en la cola de prioridad selecciona de las alternativas posibles en cada iteración, la alternativa que
+     *  minimiza el costo estimado desde la estacion inicial hasta la estacion final.
+     * @param Double [][] valoresVertice: costo de llegar a una estacion por las distintas lineas
+     * @return Vertice: Retorna el vertice que cumple con la condicion de minimo
+     */
 	private static Vertice extraerMinimo(double [][] valoresVertice) {
 		
 		double minimaDistancia = 999999; // Se usa como neutro en la primera iteracion, luego cambia al valor minimo segun la iteracion
@@ -436,7 +484,6 @@ public class MejorRuta {
 	public static String backtracking(GrafoDirigido grafo, Vertice inicio, Vertice fin) { 
 		// Declaracion de variables
 		Set<Vertice> sucesores = grafo.sucesores(verticeInicio.getId());
-		int current=0;
 		String caminoActual = inicio.getId() + " "+ inicio.getNombre();
 		boolean [] visitados = new boolean [nroEstaciones];
 		visitados[hashing.get(verticeInicio.getId())] = true;
@@ -581,7 +628,6 @@ public class MejorRuta {
 	public static String backtracking(GrafoNoDirigido grafo, Vertice inicio, Vertice fin) { 
 		// Declaracion de variables
 		Set<Vertice> adyacentes = grafo.adyacentes(verticeInicio.getId());
-		int current=0;
 		String caminoActual = inicio.getId() + " "+ inicio.getNombre();
 		boolean [] visitados = new boolean [nroEstaciones];
 		visitados[hashing.get(verticeInicio.getId())] = true;
